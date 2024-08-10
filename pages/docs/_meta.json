@@ -1,0 +1,21 @@
+{
+  "Tutorials": {
+    "type": "separator",
+    "title": "Tutorials"
+  },
+  "index": "Introduction",
+  "yolov10": "Train YOLOv10",
+  "More": {
+    "type": "separator",
+    "title": "More"
+  },
+  "about-link": {
+    "title": "About AnyLearning",
+    "href": "/about"
+  },
+  "next.js-link": {
+    "title": "Neural Research Lab ↗",
+    "href": "https://www.nrl.ai",
+    "newWindow": true
+  }
+}

@@ -1,0 +1,149 @@
+# How to Train YOLOv10 Object Detection on a Custom Datase
+
+---
+
+<p><a href="https://colab.research.google.com/github/nrl-ai/anylearning/blob/main/notebooks/yolov10-object-detection.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a><a href="https://github.com/nrl-ai/anylearning/blob/main/notebooks/yolov10-object-detection.ipynb"><img src="https://badges.aleen42.com/src/github.svg" alt="GitHub"/></a><a href="https://arxiv.org/pdf/2405.14458.pdf"><img src="https://img.shields.io/badge/arXiv-2405.14458-b31b1b.svg" alt="arXiv"/></a></p>
+
+
+YOLOv10 is a new generation in the YOLO series for real-time end-to-end object detection. It aims to improve both the performance and efficiency of YOLOs by eliminating the need for non-maximum suppression (NMS) and optimizing model architecture comprehensively. This advancement reduces computational overhead, enhancing both efficiency and capability. YOLOv10 shows state-of-the-art performance and efficiency, with YOLOv10-S being 1.8 times faster than RT-DETR-R18 and having significantly fewer parameters and FLOPs. Additionally, YOLOv10-B demonstrates 46% less latency and 25% fewer parameters compared to YOLOv9-C while maintaining the same performance.
+
+## Install YOLOv10 + Dependencies
+
+
+```python
+%pip install -q git+https://github.com/THU-MIG/yolov10.git
+%pip install huggingface_hub anylearning
+```
+
+
+```python
+import os
+
+WORKSPACE = os.path.abspath("./workspace")
+print("Workspace:", WORKSPACE)
+
+# Copy the dataset into WORKSPACE/raw_dataset
+# This is the dataset in format of AnyLabeling
+# The structure should be:
+# WORKSPACE/raw_dataset
+# ├── 0000.jpg
+# ├── 0000.json
+# ├── 0001.jpg
+# ├── 0001.json
+# ...
+RAW_DATA_ROOT = os.path.join(WORKSPACE, "raw_dataset")
+
+# This is the dataset that you will use for training
+DATA_ROOT = os.path.join(WORKSPACE, "dataset")
+```
+
+## Convert and split the data
+
+
+```python
+# Convert the dataset into the format for YOLOv10
+# The structure should be:
+# WORKSPACE/dataset
+# ├── train
+# │   ├── images
+# │   │   ├── 0000.jpg
+# │   │   ├── 0001.jpg
+# │   │   ...
+# │   └── labels
+# │       ├── 0000.txt
+# │       ├── 0001.txt
+# │       ...
+# ├── val
+# │   ├── ...
+# └── test
+#     ├── ...
+!python -m anylearning.converter --json_dir {RAW_DATA_ROOT} --val_size 0.1 --test_size 0.1 --output_dir {DATA_ROOT}
+```
+
+## Download pre-trained weights
+
+**NOTE:** YOLOv10 provides weight files pre-trained on the COCO dataset in various sizes. Let's download them.
+
+
+```python
+!mkdir -p {WORKSPACE}/weights
+!wget -P {WORKSPACE}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10n.pt
+# !wget -P {HOME}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10s.pt
+# !wget -P {HOME}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10m.pt
+# !wget -P {HOME}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10b.pt
+# !wget -P {HOME}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10x.pt
+# !wget -P {HOME}/weights -q https://github.com/THU-MIG/yolov10/releases/download/v1.1/yolov10l.pt
+!ls -lh {WORKSPACE}/weights
+```
+
+## Training
+
+
+```python
+from ultralytics import YOLO
+
+data_path = os.path.join(WORKSPACE, "dataset/dataset.yaml")
+n_epochs = 10
+bs = 16
+gpu_id = 0
+rng = 0
+verbose = True
+validate = True
+
+model = YOLO(os.path.join(WORKSPACE, "weights", "yolov10n.pt"))
+results = model.train(
+    data=data_path,
+    epochs=n_epochs,
+    batch=bs,
+    device=gpu_id,
+    verbose=verbose,
+    seed=rng,
+    val=validate
+)
+
+# After this step, you can find the trained model in ./runs/train/exp/weights/best.pt
+```
+
+## Inference with Custom Model
+
+Load the model and make predictions on a sample image from the validation set.
+
+
+```python
+import random
+import cv2
+from ultralytics import YOLOv10
+from matplotlib.pyplot import imshow
+from matplotlib import pyplot as plt
+from anylearning.utils import list_images
+
+%matplotlib inline
+
+# Load the best model
+# Check the result of the training inside the ./runs/detect/train* folder
+model = YOLOv10("runs/detect/train/weights/best.pt")
+
+test_images = list(list_images(os.path.join(DATA_ROOT, "val/images")))
+
+# Randomly select an image
+test_image = random.choice(test_images)
+
+# Load the image and predict
+# Convert the image to RGB format as OpenCV loads images in BGR format
+img = cv2.imread(test_image)
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+results = model.predict(img)
+
+# Process results list
+result = results[0]  # first image results
+boxes = result.boxes  # Boxes object for bounding box outputs
+masks = result.masks  # Masks object for segmentation masks outputs
+keypoints = result.keypoints  # Keypoints object for pose outputs
+probs = result.probs  # Probs object for classification outputs
+obb = result.obb  # Oriented boxes object for OBB outputs
+image = result.plot()  # plot predictions
+
+imshow(image)
+plt.show()
+
+```
